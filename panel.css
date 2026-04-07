@@ -1,0 +1,100 @@
+/* Gistav Aufmass Pro - Premium UI v2.7 */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700&display=swap');
+
+:root {
+    --bg-main: rgba(15, 23, 42, 0.96);
+    --bg-header: rgba(30, 41, 59, 0.98);
+    --accent: #22d3ee;
+    --accent-glow: rgba(34, 211, 238, 0.3);
+    --text-main: #f8fafc;
+    --text-dim: #94a3b8;
+    --border: rgba(255, 255, 255, 0.1);
+    --bg-input: #1e293b;
+    --btn-p: #0891b2;
+    --btn-danger: #ef4444;
+}
+
+#gistav-aufmass-panel {
+    position: fixed; top: 15px; right: 15px; width: 385px;
+    background: var(--bg-main); backdrop-filter: blur(14px);
+    border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    z-index: 999999; color: var(--text-main); font-family: 'Outfit', sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+#gistav-aufmass-panel.minimized { height: 50px; width: 220px; }
+
+.panel-header {
+    background: var(--bg-header); padding: 12px 18px;
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid var(--border); cursor: move;
+}
+.panel-header h3 { margin: 0; font-size: 13px; font-weight: 700; color: var(--accent); letter-spacing: 0.5px; }
+#min-btn { cursor: pointer; font-size: 20px; line-height: 1; }
+
+.tabs { display: flex; background: rgba(30, 41, 59, 0.5); padding: 4px; border-bottom: 1px solid var(--border); }
+.tab { flex: 1; text-align: center; padding: 10px 2px; cursor: pointer; font-size: 10px; font-weight: 700; color: var(--text-dim); border-radius: 8px; transition: 0.2s; text-transform: uppercase; }
+.tab.active { background: rgba(34, 211, 238, 0.1); color: var(--accent); }
+
+.panel-body { padding: 18px; min-height: 420px; max-height: 580px; overflow-y: auto; scrollbar-width: thin; }
+
+.measure-display {
+    background: rgba(0,0,0,0.25); padding: 18px; border-radius: 14px;
+    border: 1px solid var(--border); text-align: center; margin-bottom: 15px;
+}
+.live-val { font-size: 38px; font-weight: 700; color: var(--accent); text-shadow: 0 0 20px var(--accent-glow); margin: 2px 0; }
+.unit-lbl { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+
+label { display: block; font-size: 10px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 4px; font-weight: 700; letter-spacing: 0.5px; }
+input, select {
+    width: 100%; background: var(--bg-input); border: 1px solid #334155; color: #fff;
+    padding: 10px; border-radius: 8px; font-size: 12px; box-sizing: border-box; transition: 0.2s;
+}
+input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px var(--accent-glow); }
+
+button {
+    cursor: pointer; border: none; border-radius: 10px; padding: 12px; font-weight: 700; font-size: 11px;
+    width: 100%; transition: transform 0.1s, background 0.2s;
+}
+button:active { transform: scale(0.97); }
+.btn-p { background: var(--btn-p); color: #fff; }
+.btn-p:hover { background: #0e7490; }
+.btn-s { background: #334155; color: #f1f5f9; }
+.btn-d { background: var(--btn-danger); color: #fff; }
+
+.highlight-info {
+    background: rgba(34, 211, 238, 0.05); border: 1px dashed var(--accent);
+    padding: 12px; border-radius: 10px; margin: 10px 0;
+}
+.info-txt { font-size: 12px; color: var(--text-main); font-weight: 500; }
+
+.record-item {
+    background: #1e293b; padding: 10px 14px; border-radius: 10px; margin-bottom: 8px;
+    font-size: 11px; border: 1px solid #334155; display: flex; flex-direction: column; gap: 4px;
+}
+.rec-row { display: flex; justify-content: space-between; align-items: center; }
+.rec-id { color: var(--accent); font-weight: 700; }
+.rec-addr { color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+
+.status-footer {
+    padding: 10px 18px; font-size: 11px; color: var(--text-dim); background: rgba(0,0,0,0.1);
+    border-top: 1px solid var(--border); text-align: center;
+}
+.success { color: #4ade80; }
+.danger { color: #f87171; }
+
+/* Remove Spinners for manual entry */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+  appearance: none;
+}
