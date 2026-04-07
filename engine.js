@@ -118,45 +118,12 @@
         }
     });
 
-    // ─── Patch Draw Control for yellow color at draw time ────────────────────
     const SKETCH_STYLE = { color: '#facc15', weight: 6, opacity: 0.95 };
 
-    function patchDrawControlColor(map) {
-        // Scan map object for a Leaflet.Draw control
-        try {
-            for (const key in map) {
-                const obj = map[key];
-                if (obj && obj._toolbars && obj._toolbars.draw) {
-                    const modes = obj._toolbars.draw._modes;
-                    if (modes) Object.values(modes).forEach(mode => {
-                        if (mode.handler && mode.handler.options)
-                            mode.handler.options.shapeOptions = { ...SKETCH_STYLE };
-                    });
-                }
-            }
-        } catch(e) {}
-        // Also scan window
-        try {
-            for (const k in window) {
-                const obj = window[k];
-                if (obj && obj._toolbars && obj._toolbars.draw) {
-                    const modes = obj._toolbars.draw._modes;
-                    if (modes) Object.values(modes).forEach(mode => {
-                        if (mode.handler && mode.handler.options)
-                            mode.handler.options.shapeOptions = { ...SKETCH_STYLE };
-                    });
-                }
-            }
-        } catch(e) {}
-    }
-
-    // ─── Draw Hook: intercept Leaflet.Draw events ────────────────────────────
+    // ─── Draw Hook: just track the blue layer locally ─────────────────────────
     function initDrawHook(map) {
         if (map._gistav_hooked) return;
         map._gistav_hooked = true;
-
-        patchDrawControlColor(map);
-        map.on('draw:drawstart', () => patchDrawControlColor(map));
 
         map.on('draw:created', (e) => {
             const layer = e.layer;
@@ -164,37 +131,52 @@
 
             const latlngs = latlngsToPlain(layer.getLatLngs());
 
-            // After Gustav site's own draw:created handler runs, restyle with yellow
-            setTimeout(() => {
-                try {
-                    layer.setStyle(SKETCH_STYLE);
-                    if (layer._path) {
-                        layer._path.setAttribute('stroke', '#facc15');
-                        layer._path.setAttribute('stroke-width', '6');
-                        layer._path.setAttribute('stroke-opacity', '0.95');
-                    }
-                } catch(err) {}
-            }, 50);
+            // Track as pending (still blue from Leaflet.Draw)
+            activeSketches.push({ section: 'pending', layer, latlngs });
 
-            // Send to content.js for IMMEDIATE storage via postMessage
+            // Notify content.js so it holds the latlngs for Save
             window.postMessage({ type: 'GISTAV_SAVE_SKETCH', latlngs }, '*');
-
-            activeSketches.push({ section: 'pending', layer });
-            console.log('🖊 Gistav: sketch captured & sent to storage');
+            console.log('🖊 Gistav: blue line drawn, waiting for Save...');
         });
     }
 
+    // ─── COMMIT: on Save press, replace blue pending layers with yellow ────────
+    // Exactly like the label system: action happens at Save time, not draw time.
+    window.addEventListener('GISTAV_COMMIT_SKETCHES', (e) => {
+        const { section } = e.detail || {};
+        const map = findMap();
+        if (!map) return;
+
+        for (let i = activeSketches.length - 1; i >= 0; i--) {
+            const s = activeSketches[i];
+            if (s.section !== 'pending') continue;
+
+            // Remove the blue Leaflet.Draw layer
+            try { s.layer.remove(); } catch(err) {}
+
+            // Draw a new yellow one in its place
+            try {
+                const coords = s.latlngs.map(p => L.latLng(p.lat, p.lng));
+                const yellowLine = L.polyline(coords, SKETCH_STYLE).addTo(map);
+                activeSketches[i] = { section, layer: yellowLine, latlngs: s.latlngs };
+                console.log('✅ Gistav: sketch committed yellow for section', section);
+            } catch(err) {
+                activeSketches.splice(i, 1);
+            }
+        }
+    });
 
     // ─── Ready Interval ───────────────────────────────────────────────────────
     const readyInterval = setInterval(() => {
         const map = findMap();
         if (map) {
             clearInterval(readyInterval);
-            while (pendingQueue.length)        addMarkerNow(pendingQueue.shift());
-            while (pendingSketchesQueue.length) drawSketch(pendingSketchesQueue.shift());
+            while (pendingQueue.length)         addMarkerNow(pendingQueue.shift());
+            while (pendingSketchesQueue.length)  drawSketch(pendingSketchesQueue.shift());
             initDrawHook(map);
             console.log('✅ Gistav engine ready.');
         }
     }, 300);
 
 })();
+

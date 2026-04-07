@@ -741,15 +741,25 @@
             });
 
             if (subitems.length > 0) {
-                // Assign pending sketches to this section
-                pendingSketches.forEach(ps => {
-                    const sketchObj = { section: project.section, latlngs: ps };
-                    sketches.push(sketchObj);
-                    window.dispatchEvent(new CustomEvent('GISTAV_REDRAW_SKETCH', { detail: sketchObj }));
-                });
-                pendingSketches = []; // Clear pending
-                
-                // Map visualization only shows the main RA integer
+                // Commit pending sketches: link to this section + save + turn yellow
+                if (pendingSketches.length > 0) {
+                    // Update pending sketches in storage to use this section number
+                    sketches = sketches.map(s =>
+                        s.section === 'pending' ? { section: project.section, latlngs: s.latlngs } : s
+                    );
+                    // Also add any that arrived via postMessage but weren't in sketches[]
+                    pendingSketches.forEach(latlngs => {
+                        if (!sketches.find(s => s.section === project.section && JSON.stringify(s.latlngs) === JSON.stringify(latlngs))) {
+                            sketches.push({ section: project.section, latlngs });
+                        }
+                    });
+                    chrome.storage.local.set({ [STORAGE_SKETCHES]: sketches });
+                    // Tell engine.js to replace blue Leaflet.Draw layers with yellow
+                    window.dispatchEvent(new CustomEvent('GISTAV_COMMIT_SKETCHES', { detail: { section: project.section } }));
+                    pendingSketches = [];
+                }
+
+                // RA label on map
                 dropRAMarker(project.section);
             }
 
