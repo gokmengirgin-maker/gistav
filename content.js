@@ -330,7 +330,8 @@
         ],
         ha_extras: [
             { id: "2.2.5", text: "HA-Bohrung/Einführung", unit: "ST" },
-            { id: "2.3.3", text: "Herstellen eines Kopfloches", unit: "ST" }
+            { id: "2.3.3", text: "Herstellen eines Kopfloches", unit: "ST" },
+            { id: "2.4.10", text: "NTR: Gartenmauerdurchbruch", unit: "ST" }
         ],
         verband: ["1Verband", "2Verband", "3Verband", "4Verband", "5Verband", "6Verband", "7Verband", "8Verband", "9Verband", "10Verband"]
     };
@@ -386,7 +387,7 @@
         const val = selPos.value;
         const isGraben = ['2.1.1', '2.1.2', '2.1.3', '2.1.7', '2.1.6'].includes(val);
         const isHA = (val === '2.2.1');
-        const isStandaloneHA = ['2.2.5', '2.3.3'].includes(val);
+        const isStandaloneHA = ['2.2.5', '2.3.3', '2.4.10'].includes(val);
         zulSlots.innerHTML = "";
 
         if (isGraben) {
@@ -401,7 +402,7 @@
             }
         } else if (isHA || isStandaloneHA) {
             zulCont.style.display = "block";
-            for (let i = 1; i <= 4; i++) {
+            for (let i = 1; i <= 5; i++) {
                 zulSlots.appendChild(createZulSelect(`HA Option ${i}`, ZULAGE_OPTS.ha_extras));
             }
         } else {
