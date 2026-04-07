@@ -111,11 +111,15 @@
         console.log('Gistav: All markers cleared');
     });
 
-    const activeSketches = [];
+    const activeSketches = []; // { section, layer, latlngs }
 
-    function addSketchNow(latlngs) {
+    function addSketchNow(sketch) {
+        if (!sketch || !sketch.latlngs) return;
+        const { section, latlngs } = sketch;
+        
         const map = findMap();
         if (!map) return;
+        
         try {
             const line = L.polyline(latlngs, {
                 color: '#facc15',
@@ -123,7 +127,7 @@
                 opacity: 0.9,
                 dashArray: '1, 10'
             }).addTo(map);
-            activeSketches.push(line);
+            activeSketches.push({ section, layer: line, latlngs });
         } catch(e) { console.error('Gistav: Redraw sketch error', e); }
     }
 
@@ -131,9 +135,21 @@
         addSketchNow(e.detail);
     });
 
-    window.addEventListener('GISTAV_CLEAR_SKETCHES', () => {
-        activeSketches.forEach(s => s.remove());
-        activeSketches.length = 0;
+    window.addEventListener('GISTAV_CLEAR_SKETCHES', (e) => {
+        const sectionToDelete = e.detail?.section;
+        if (sectionToDelete) {
+            for (let i = activeSketches.length - 1; i >= 0; i--) {
+                if (activeSketches[i].section === sectionToDelete) {
+                    activeSketches[i].layer.remove();
+                    activeSketches.splice(i, 1);
+                }
+            }
+            console.log('Gistav: Sketch cleared for section', sectionToDelete);
+        } else {
+            activeSketches.forEach(s => s.layer.remove());
+            activeSketches.length = 0;
+            console.log('Gistav: All sketches cleared');
+        }
     });
 
     function initDrawHook(map) {
@@ -141,11 +157,15 @@
         map._gistav_hooked = true;
         map.on('draw:created', (e) => {
             const layer = e.layer;
-            if (layer instanceof L.Polyline) {
+            const isPoly = layer instanceof L.Polyline || (layer.getLatLngs && Array.isArray(layer.getLatLngs()));
+            if (isPoly) {
                 layer.setStyle({ color: '#facc15', weight: 5, opacity: 0.9 });
                 const latlngs = layer.getLatLngs();
+                // Send to content.js to store as pending
                 window.dispatchEvent(new CustomEvent('GISTAV_SKETCH_CREATED', { detail: latlngs }));
-                activeSketches.push(layer);
+                // We DON'T push to activeSketches yet because it doesn't have a section ID assigned
+                // BUT we should keep track of it so we can remove it if needed or if it's discarded
+                activeSketches.push({ section: 'pending', layer: layer, latlngs: latlngs });
             }
         });
     }

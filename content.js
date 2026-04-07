@@ -25,6 +25,7 @@
 
     let records = [];
     let sketches = [];
+    let pendingSketches = [];
     let project = {
         nvt: 'NVT 80',
         baustelle: 'Neustraße + Bahnhofstraße',
@@ -177,14 +178,13 @@
             // Tell engine to redraw sketches once map is ready
             setTimeout(() => {
                 sketches.forEach(s => window.dispatchEvent(new CustomEvent('GISTAV_REDRAW_SKETCH', { detail: s })));
-            }, 2000);
+            }, 3000);
         }
         updateDataView();
     });
 
     window.addEventListener('GISTAV_SKETCH_CREATED', (e) => {
-        sketches.push(e.detail);
-        chrome.storage.local.set({ [STORAGE_SKETCHES]: sketches });
+        pendingSketches.push(e.detail);
     });
     // --- Track Map Clicks for Point Markers ---
     document.addEventListener('mousedown', (e) => {
@@ -569,11 +569,22 @@
             delBtn.onclick = (e) => {
                 e.stopPropagation();
                 const idx = parseInt(delBtn.dataset.idx);
-                if (confirm(`${records[idx].ra} numaralı kaydı silmek istiyor musunuz?`)) {
-                    records.splice(idx, 1);
-                    chrome.storage.local.set({ [STORAGE_RECORDS]: records }, () => {
+                const sectionToDelete = parseInt(records[idx].ra);
+                
+                if (confirm(`RA ${sectionToDelete} grubuna ait tüm verileri ve çizimi silmek istiyor musunuz?`)) {
+                    // Delete all records of this section
+                    records = records.filter(rec => parseInt(rec.ra) !== sectionToDelete);
+                    // Delete all sketches of this section
+                    sketches = sketches.filter(s => s.section !== sectionToDelete);
+                    
+                    window.dispatchEvent(new CustomEvent('GISTAV_CLEAR_SKETCHES', { detail: { section: sectionToDelete } }));
+                    
+                    chrome.storage.local.set({ 
+                        [STORAGE_RECORDS]: records,
+                        [STORAGE_SKETCHES]: sketches
+                    }, () => {
                         updateDataView();
-                        setMsg("Kayıt silindi", "danger");
+                        setMsg(`RA ${sectionToDelete} silindi`, "danger");
                     });
                 }
             };
@@ -715,7 +726,15 @@
             });
 
             if (subitems.length > 0) {
-                // Map visualization only shows the main RA integer to keep it clean
+                // Assign pending sketches to this section
+                pendingSketches.forEach(ps => {
+                    const sketchObj = { section: project.section, latlngs: ps };
+                    sketches.push(sketchObj);
+                    window.dispatchEvent(new CustomEvent('GISTAV_REDRAW_SKETCH', { detail: sketchObj }));
+                });
+                pendingSketches = []; // Clear pending
+                
+                // Map visualization only shows the main RA integer
                 dropRAMarker(project.section);
             }
 
@@ -723,6 +742,7 @@
             
             // Advance to next whole number for the next measurement
             project.section++;
+            chrome.storage.local.set({ [STORAGE_SKETCHES]: sketches });
             document.getElementById('p-sec').value = project.section;
             
             chrome.storage.local.set({ [STORAGE_RECORDS]: records }, () => {
