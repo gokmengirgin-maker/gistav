@@ -11,23 +11,40 @@
     // ─── Map Finder ──────────────────────────────────────────────────────────
     function findMap() {
         if (cachedMap) return cachedMap;
-        const containers = document.querySelectorAll('.leaflet-container');
-        for (const el of containers) {
-            if (el._leaflet_map) { cachedMap = el._leaflet_map; return cachedMap; }
+        
+        // 1. Standard Leaflet DOM hook
+        const elements = document.querySelectorAll('*');
+        for (const el of elements) {
+            if (el._leaflet_map) { 
+                cachedMap = el._leaflet_map; 
+                console.log('✅ Gistav: Map found via DOM _leaflet_map', el);
+                return cachedMap; 
+            }
+            if (el.className && typeof el.className === 'string' && el.className.includes('leaflet-container')) {
+                // Slower deep scan for hidden keys on the container
+                for (const k of Object.keys(el)) {
+                    if (el[k] && typeof el[k] === 'object' && el[k].containerPointToLatLng) {
+                        cachedMap = el[k];
+                        console.log('✅ Gistav: Map found via deep DOM key', k);
+                        return cachedMap;
+                    }
+                }
+            }
         }
+        
+        // 2. Global Window scan
         for (const key in window) {
             try {
                 const obj = window[key];
                 if (obj && typeof obj === 'object') {
-                    if (typeof obj.containerPointToLatLng === 'function' &&
-                        typeof obj.latLngToContainerPoint === 'function' &&
-                        typeof obj.getPanes === 'function') {
+                    if (typeof obj.containerPointToLatLng === 'function') {
                         cachedMap = obj;
                         console.log('✅ Gistav: Map found under window.' + key);
                         return cachedMap;
                     }
                     if (obj.map && typeof obj.map.containerPointToLatLng === 'function') {
                         cachedMap = obj.map;
+                        console.log('✅ Gistav: Map found under window.' + key + '.map');
                         return cachedMap;
                     }
                 }
@@ -35,6 +52,7 @@
         }
         return null;
     }
+
 
     // ─── RA Markers ──────────────────────────────────────────────────────────
     function addMarkerNow(detail) {
@@ -175,14 +193,26 @@
     }
 
     // ─── Ready Interval ───────────────────────────────────────────────────────
+    let mapWaitTicks = 0;
     const readyInterval = setInterval(() => {
         const map = findMap();
         if (map) {
             clearInterval(readyInterval);
+            
+            // Check if L exists for F5 redraw capabilities
+            if (typeof L === 'undefined') {
+                console.warn('⚠️ Gistav: Global Leaflet (L) is missing! F5 redraws might fail.');
+                // Try to find it if possible
+                if (window.leaflet) window.L = window.leaflet;
+            }
+            
             while (pendingQueue.length)         addMarkerNow(pendingQueue.shift());
             while (pendingSketchesQueue.length)  drawSketch(pendingSketchesQueue.shift());
             initDrawHook(map);
             console.log('✅ Gistav engine ready.');
+        } else {
+            mapWaitTicks++;
+            if (mapWaitTicks % 10 === 0) console.log('⏳ Gistav: still waiting for map... (' + (mapWaitTicks*300/1000) + 's)');
         }
     }, 300);
 
