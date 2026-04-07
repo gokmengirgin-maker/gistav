@@ -184,9 +184,16 @@
         updateDataView();
     });
 
-    window.addEventListener('GISTAV_SKETCH_CREATED', (e) => {
-        pendingSketches.push(e.detail);
+    // Receive drawn sketches from engine.js (page world → content world via postMessage)
+    window.addEventListener('message', (e) => {
+        if (e.source !== window || !e.data || e.data.type !== 'GISTAV_SAVE_SKETCH') return;
+        const latlngs = e.data.latlngs;
+        if (!latlngs) return;
+        // Save as 'pending' section; will be linked to RA section on Save
+        pendingSketches.push(latlngs);
+        console.log('Gistav content.js: sketch received, pending save.');
     });
+
     // --- Track Map Clicks for Point Markers ---
     document.addEventListener('mousedown', (e) => {
         const container = document.querySelector('.leaflet-container') || document.body;
