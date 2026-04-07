@@ -522,11 +522,38 @@
     function updateDataView() {
         const list = document.getElementById('records-list');
         list.innerHTML = "";
-        records.slice(-30).reverse().forEach((r) => {
+        
+        // Track original index for deletion logic
+        const indexedRecords = records.map((r, idx) => ({ ...r, _idx: idx }));
+        const displayList = indexedRecords.slice(-50).reverse();
+
+        displayList.forEach((r) => {
             const div = document.createElement('div');
             div.className = 'record-item';
-            div.innerHTML = `<div class="rec-row"><span class="rec-id">RA ${r.ra} [${r.id}]</span> <span class="rec-addr">${r.address.split(',')[0]}</span></div>
-                             <div class="rec-row" style="margin-top:2px;"><span>${r.desc.slice(0, 35)}</span> <b style="color:#fff">${String(r.val).replace('.', ',')} ${r.unit}</b></div>`;
+            div.innerHTML = `<div class="rec-row">
+                                <span class="rec-id">RA ${r.ra} [${r.id}]</span> 
+                                <div style="display:flex; align-items:center;">
+                                    <span class="rec-addr">${r.address.split(',')[0]}</span>
+                                    <span class="btn-delete-rec" data-idx="${r._idx}" title="Eintrag löschen">🗑️</span>
+                                </div>
+                             </div>
+                             <div class="rec-row" style="margin-top:2px;">
+                                <span>${r.desc.slice(0, 35)}</span> 
+                                <b style="color:#fff">${String(r.val).replace('.', ',')} ${r.unit}</b>
+                             </div>`;
+            
+            const delBtn = div.querySelector('.btn-delete-rec');
+            delBtn.onclick = (e) => {
+                e.stopPropagation();
+                const idx = parseInt(delBtn.dataset.idx);
+                if (confirm(`${records[idx].ra} numaralı kaydı silmek istiyor musunuz?`)) {
+                    records.splice(idx, 1);
+                    chrome.storage.local.set({ [STORAGE_RECORDS]: records }, () => {
+                        updateDataView();
+                        setMsg("Kayıt silindi", "danger");
+                    });
+                }
+            };
             list.appendChild(div);
         });
     }
