@@ -563,6 +563,15 @@
                     // Delete all records of this section
                     records = records.filter(rec => parseInt(rec.ra) !== sectionToDelete);
                     
+                    // Remove the map marker for this section
+                    deleteMarkerByRA(sectionToDelete);
+                    
+                    // Recalculate next RA section to avoid gaps
+                    const maxRA = records.length > 0 ? Math.max(...records.map(r => parseInt(r.ra))) : 0;
+                    project.section = maxRA + 1;
+                    document.getElementById('p-sec').value = project.section;
+                    syncProject();
+
                     chrome.storage.local.set({ 
                         [STORAGE_RECORDS]: records
                     }, () => {
@@ -935,6 +944,18 @@
         for (const k in localMarkers) delete localMarkers[k];
         const overlay = document.getElementById('gistav-math-overlay');
         if (overlay) overlay.innerHTML = "";
+        syncMarkers();
+    }
+
+    function deleteMarkerByRA(raText) {
+        const textToMatch = "RA " + raText;
+        for (const [id, m] of Object.entries(localMarkers)) {
+            if (m.text === textToMatch) {
+                const el = document.getElementById(id);
+                if (el) el.remove();
+                delete localMarkers[id];
+            }
+        }
         syncMarkers();
     }
 
