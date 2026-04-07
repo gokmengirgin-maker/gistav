@@ -326,7 +326,8 @@
             { id: "2.4.3", text: "Zulage Mehrstärke Asphalt" },
             { id: "2.4.4", text: "Zulage Bodenaustausch" },
             { id: "2.4.5", text: "Zulage Graben-Mehrtiefe" },
-            { id: "2.4.6", text: "Zulage Graben-Mehrbreite" }
+            { id: "2.4.6", text: "Zulage Graben-Mehrbreite" },
+            { id: "2.3.3", text: "Herstellen eines Kopfloches", unit: "ST" }
         ],
         ha_extras: [
             { id: "2.2.5", text: "HA-Bohrung/Einführung", unit: "ST" },
@@ -358,12 +359,29 @@
     function createZulSelect(label, options, isSimpleArr = false) {
         const wrap = document.createElement('div');
         wrap.style.display = "flex";
-        wrap.style.flexDirection = "column";
+        wrap.style.gap = "5px";
+        wrap.style.marginBottom = "4px";
 
         const sel = document.createElement('select');
         sel.className = label === 'Verband' ? 'zul-verband-select' : 'zul-extra-select';
+        sel.style.flex = "1";
         sel.style.fontSize = "11px";
         sel.style.padding = "4px";
+
+        const factorIn = document.createElement('input');
+        factorIn.type = "number";
+        factorIn.className = "zul-extra-factor";
+        factorIn.value = "1.0";
+        factorIn.step = "0.1";
+        factorIn.min = "0.1";
+        factorIn.style.width = "45px";
+        factorIn.style.display = "none";
+        factorIn.style.fontSize = "11px";
+        factorIn.style.padding = "4px";
+        factorIn.style.background = "#1e293b";
+        factorIn.style.border = "1px solid #334155";
+        factorIn.style.color = "#fff";
+        factorIn.title = "Zulage Faktor (F)";
 
         const def = document.createElement('option');
         def.value = "";
@@ -379,7 +397,13 @@
             sel.appendChild(opt);
         });
 
+        sel.onchange = () => {
+            const needsF = ['2.4.1', '2.4.2', '2.4.3', '2.4.4'].includes(sel.value);
+            factorIn.style.display = needsF ? "block" : "none";
+        };
+
         wrap.appendChild(sel);
+        wrap.appendChild(factorIn);
         return wrap;
     }
 
@@ -396,6 +420,7 @@
             zulCont.style.display = "block";
             // Separate Verband dropdown
             zulSlots.appendChild(createZulSelect("Verband", ZULAGE_OPTS.verband, true));
+            
             // 5 Zulage dropdowns as requested
             for (let i = 1; i <= 5; i++) {
                 zulSlots.appendChild(createZulSelect(`Zulage ${i}`, ZULAGE_OPTS.graben));
@@ -599,10 +624,18 @@
                 const optExtra = sel.options[sel.selectedIndex];
                 const extraUnit = optExtra.dataset.unit || "M";
                 
+                const factorIn = sel.parentElement.querySelector('.zul-extra-factor');
+                let extraF = 1.0;
+                if (factorIn && factorIn.style.display !== 'none') {
+                    extraF = parseFloat(factorIn.value) || 1.0;
+                }
+
                 let extraText = "Zulage";
                 [...ZULAGE_OPTS.graben, ...ZULAGE_OPTS.ha_extras].forEach(o => { if (o.id === extraId) extraText = o.text; });
-                let extraMenge = (extraUnit === 'M') ? (f * d).toFixed(2) : f;
-                subitems.push({ id: extraId, val: extraMenge, unit: extraUnit, f: f, b: b, t: t, d: d.toFixed(2), desc: extraText, address: vVal });
+                
+                const totalF = f * extraF;
+                let extraMenge = (extraUnit === 'M') ? (totalF * d).toFixed(2) : totalF.toFixed(2);
+                subitems.push({ id: extraId, val: extraMenge, unit: extraUnit, f: totalF, b: b, t: t, d: d.toFixed(2), desc: extraText, address: vVal });
             }
         });
 
