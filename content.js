@@ -328,8 +328,8 @@
             { id: "2.4.6", text: "Zulage Graben-Mehrbreite" }
         ],
         ha_extras: [
-            { id: "2.2.5", text: "HA-Drilling/Inlet", unit: "ST" },
-            { id: "2.3.3", text: "Create Headhole", unit: "ST" }
+            { id: "2.2.5", text: "HA-Bohrung/Einführung", unit: "ST" },
+            { id: "2.3.3", text: "Herstellen eines Kopfloches", unit: "ST" }
         ],
         verband: ["1Verband", "2Verband", "3Verband", "4Verband", "5Verband", "6Verband", "7Verband", "8Verband", "9Verband", "10Verband"]
     };
@@ -383,7 +383,7 @@
 
     selPos.onchange = () => {
         const val = selPos.value;
-        const isGraben = ['2.1.1', '2.1.2', '2.1.3', '2.1.7'].includes(val);
+        const isGraben = ['2.1.1', '2.1.2', '2.1.3', '2.1.7', '2.1.6'].includes(val);
         const isHA = (val === '2.2.1');
         const isStandaloneHA = ['2.2.5', '2.3.3'].includes(val);
         zulSlots.innerHTML = "";
@@ -400,8 +400,9 @@
             }
         } else if (isHA || isStandaloneHA) {
             zulCont.style.display = "block";
-            zulSlots.appendChild(createZulSelect("HA Option 1", ZULAGE_OPTS.ha_extras));
-            zulSlots.appendChild(createZulSelect("HA Option 2", ZULAGE_OPTS.ha_extras));
+            for (let i = 1; i <= 4; i++) {
+                zulSlots.appendChild(createZulSelect(`HA Option ${i}`, ZULAGE_OPTS.ha_extras));
+            }
         } else {
             zulCont.style.display = "none";
         }
@@ -546,6 +547,15 @@
                 subitems.push({ id: "2.4.8", val: restSQ, unit: "M", f: 1.0, b: b, t: t, d: restSQ, desc: descExtra });
             } else {
                 subitems.push({ id: "2.1.6", val: 1, unit: "ST", f: 1.0, d: d.toFixed(2), b: b, t: t, desc: descMain });
+            }
+
+            // --- SQ Verband Calculation ---
+            if (vVal && vVal.includes("Verband")) {
+                const bCount = parseInt(vVal.replace("Verband", ""));
+                if (bCount > 3) {
+                    const extraB = bCount - 3;
+                    subitems.push({ id: "2.4.9", val: (d * extraB).toFixed(2), unit: "M", f: extraB, b: "", t: "", d: d.toFixed(2), desc: "Zulage weiterer Verband ab v4", address: vVal });
+                }
             }
         } else {
             const opt = selPos.options[selPos.selectedIndex];
