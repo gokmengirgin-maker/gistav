@@ -559,17 +559,12 @@
                 const idx = parseInt(delBtn.dataset.idx);
                 const sectionToDelete = parseInt(records[idx].ra);
                 
-                if (confirm(`RA ${sectionToDelete} grubuna ait tüm verileri ve çizimi silmek istiyor musunuz?`)) {
+                if (confirm(`RA ${sectionToDelete} grubuna ait verileri silmek istiyor musunuz?`)) {
                     // Delete all records of this section
                     records = records.filter(rec => parseInt(rec.ra) !== sectionToDelete);
-                    // Delete all sketches of this section
-                    sketches = sketches.filter(s => s.section !== sectionToDelete);
-                    
-                    window.dispatchEvent(new CustomEvent('GISTAV_CLEAR_SKETCHES', { detail: { section: sectionToDelete } }));
                     
                     chrome.storage.local.set({ 
-                        [STORAGE_RECORDS]: records,
-                        [STORAGE_SKETCHES]: sketches
+                        [STORAGE_RECORDS]: records
                     }, () => {
                         updateDataView();
                         setMsg(`RA ${sectionToDelete} silindi`, "danger");
