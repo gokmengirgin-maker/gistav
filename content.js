@@ -164,6 +164,7 @@
             }
         }
     `;
+    document.head.appendChild(style);
     chrome.storage.local.get([STORAGE_RECORDS, STORAGE_PROJECT, STORAGE_SKETCHES], (res) => {
         if (res[STORAGE_RECORDS]) records = res[STORAGE_RECORDS];
         if (res[STORAGE_PROJECT]) {

@@ -112,13 +112,18 @@
     });
 
     const activeSketches = []; // { section, layer, latlngs }
+    const pendingSketchesQueue = [];
 
     function addSketchNow(sketch) {
         if (!sketch || !sketch.latlngs) return;
         const { section, latlngs } = sketch;
         
         const map = findMap();
-        if (!map) return;
+        if (!map) {
+            console.warn('Gistav: map not ready, queuing sketch');
+            pendingSketchesQueue.push(sketch);
+            return;
+        }
         
         try {
             const line = L.polyline(latlngs, {
@@ -178,6 +183,9 @@
             console.log('✅ Gistav: Map found! Flushing queue:', pendingQueue.length, 'items');
             while (pendingQueue.length > 0) {
                 addMarkerNow(pendingQueue.shift());
+            }
+            while (pendingSketchesQueue.length > 0) {
+                addSketchNow(pendingSketchesQueue.shift());
             }
             initDrawHook(map);
         }
