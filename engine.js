@@ -111,14 +111,55 @@
         console.log('Gistav: All markers cleared');
     });
 
+    const activeSketches = [];
+
+    function addSketchNow(latlngs) {
+        const map = findMap();
+        if (!map) return;
+        try {
+            const line = L.polyline(latlngs, {
+                color: '#facc15',
+                weight: 5,
+                opacity: 0.9,
+                dashArray: '1, 10'
+            }).addTo(map);
+            activeSketches.push(line);
+        } catch(e) { console.error('Gistav: Redraw sketch error', e); }
+    }
+
+    window.addEventListener('GISTAV_REDRAW_SKETCH', (e) => {
+        addSketchNow(e.detail);
+    });
+
+    window.addEventListener('GISTAV_CLEAR_SKETCHES', () => {
+        activeSketches.forEach(s => s.remove());
+        activeSketches.length = 0;
+    });
+
+    function initDrawHook(map) {
+        if (map._gistav_hooked) return;
+        map._gistav_hooked = true;
+        map.on('draw:created', (e) => {
+            const layer = e.layer;
+            if (layer instanceof L.Polyline) {
+                layer.setStyle({ color: '#facc15', weight: 5, opacity: 0.9 });
+                const latlngs = layer.getLatLngs();
+                window.dispatchEvent(new CustomEvent('GISTAV_SKETCH_CREATED', { detail: latlngs }));
+                activeSketches.push(layer);
+            }
+        });
+    }
+
     // Poll until map is available, then flush pending queue
     const readyInterval = setInterval(() => {
-        if (findMap()) {
+        const map = findMap();
+        if (map) {
             clearInterval(readyInterval);
             console.log('✅ Gistav: Map found! Flushing queue:', pendingQueue.length, 'items');
             while (pendingQueue.length > 0) {
                 addMarkerNow(pendingQueue.shift());
             }
+            initDrawHook(map);
         }
     }, 300);
 

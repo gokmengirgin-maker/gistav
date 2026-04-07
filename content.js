@@ -21,8 +21,10 @@
     const STORAGE_RECORDS = 'gistav_aufmass_data_v2';
     const STORAGE_PROJECT = 'gistav_aufmass_project_v1';
     const STORAGE_MARKERS = 'gistav_aufmass_markers_v1';
+    const STORAGE_SKETCHES = 'gistav_aufmass_sketches_v1';
 
     let records = [];
+    let sketches = [];
     let project = {
         nvt: 'NVT 80',
         baustelle: 'Neustraße + Bahnhofstraße',
@@ -161,8 +163,29 @@
             }
         }
     `;
-    document.head.appendChild(style);
+    chrome.storage.local.get([STORAGE_RECORDS, STORAGE_PROJECT, STORAGE_SKETCHES], (res) => {
+        if (res[STORAGE_RECORDS]) records = res[STORAGE_RECORDS];
+        if (res[STORAGE_PROJECT]) {
+            project = { ...project, ...res[STORAGE_PROJECT] };
+            document.getElementById('p-nvt').value = project.nvt;
+            document.getElementById('p-bau').value = project.baustelle;
+            document.getElementById('p-kol').value = project.kolonne;
+            document.getElementById('p-sec').value = project.section;
+        }
+        if (res[STORAGE_SKETCHES]) {
+            sketches = res[STORAGE_SKETCHES];
+            // Tell engine to redraw sketches once map is ready
+            setTimeout(() => {
+                sketches.forEach(s => window.dispatchEvent(new CustomEvent('GISTAV_REDRAW_SKETCH', { detail: s })));
+            }, 2000);
+        }
+        updateDataView();
+    });
 
+    window.addEventListener('GISTAV_SKETCH_CREATED', (e) => {
+        sketches.push(e.detail);
+        chrome.storage.local.set({ [STORAGE_SKETCHES]: sketches });
+    });
     // --- Track Map Clicks for Point Markers ---
     document.addEventListener('mousedown', (e) => {
         const container = document.querySelector('.leaflet-container') || document.body;
@@ -741,7 +764,13 @@
             records = []; project.section = 1; project.sub_section = 0;
             document.getElementById('p-sec').value = 1;
             clearMarkers();
-            chrome.storage.local.set({ [STORAGE_RECORDS]: [], [STORAGE_PROJECT]: project }, updateDataView);
+            sketches = [];
+            window.dispatchEvent(new CustomEvent('GISTAV_CLEAR_SKETCHES'));
+            chrome.storage.local.set({ 
+                [STORAGE_RECORDS]: [], 
+                [STORAGE_PROJECT]: project, 
+                [STORAGE_SKETCHES]: [] 
+            }, updateDataView);
         }
     };
 
