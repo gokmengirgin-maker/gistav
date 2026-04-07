@@ -101,26 +101,47 @@
         } catch(e) { console.error('Gistav: drawSketch error', e); }
     }
 
-    window.addEventListener('GISTAV_REDRAW_SKETCH', (e) => drawSketch(e.detail));
+    // ─── Single postMessage handler (content.js → engine.js cross-world bridge) ─
+    window.addEventListener('message', (e) => {
+        if (!e.data || !e.data.type || !e.data.type.startsWith('GISTAV_')) return;
+        const { type, section, latlngs } = e.data;
 
-    window.addEventListener('GISTAV_CLEAR_SKETCHES', (e) => {
-        const sec = e.detail && e.detail.section;
-        if (sec !== undefined && sec !== null) {
-            for (let i = activeSketches.length - 1; i >= 0; i--) {
-                if (activeSketches[i].section === sec) {
-                    activeSketches[i].layer.remove();
-                    activeSketches.splice(i, 1);
+        if (type === 'GISTAV_REDRAW_SKETCH') {
+            drawSketch({ section, latlngs });
+
+        } else if (type === 'GISTAV_CLEAR_SKETCHES') {
+            if (section !== undefined && section !== null) {
+                for (let i = activeSketches.length - 1; i >= 0; i--) {
+                    if (activeSketches[i].section === section) {
+                        activeSketches[i].layer.remove();
+                        activeSketches.splice(i, 1);
+                    }
                 }
+            } else {
+                activeSketches.forEach(s => s.layer.remove());
+                activeSketches.length = 0;
             }
-        } else {
-            activeSketches.forEach(s => s.layer.remove());
-            activeSketches.length = 0;
+
+        } else if (type === 'GISTAV_COMMIT_SKETCHES') {
+            const map = findMap();
+            if (!map) return;
+            for (let i = activeSketches.length - 1; i >= 0; i--) {
+                const s = activeSketches[i];
+                if (s.section !== 'pending') continue;
+                try { s.layer.remove(); } catch(err) {}
+                try {
+                    const coords = s.latlngs.map(p => L.latLng(p.lat, p.lng));
+                    const yellowLine = L.polyline(coords, SKETCH_STYLE).addTo(map);
+                    activeSketches[i] = { section, layer: yellowLine, latlngs: s.latlngs };
+                    console.log('✅ Gistav: yellow line committed for section', section);
+                } catch(err) { activeSketches.splice(i, 1); }
+            }
         }
     });
 
     const SKETCH_STYLE = { color: '#facc15', weight: 6, opacity: 0.95 };
 
-    // ─── Draw Hook: just track the blue layer locally ─────────────────────────
+    // ─── Draw Hook: track blue layer, send latlngs to content.js via postMessage ─
     function initDrawHook(map) {
         if (map._gistav_hooked) return;
         map._gistav_hooked = true;
@@ -134,37 +155,11 @@
             // Track as pending (still blue from Leaflet.Draw)
             activeSketches.push({ section: 'pending', layer, latlngs });
 
-            // Notify content.js so it holds the latlngs for Save
+            // Tell content.js (isolated world) via postMessage
             window.postMessage({ type: 'GISTAV_SAVE_SKETCH', latlngs }, '*');
-            console.log('🖊 Gistav: blue line drawn, waiting for Save...');
+            console.log('🖊 Gistav: blue line drawn, awaiting Save...');
         });
     }
-
-    // ─── COMMIT: on Save press, replace blue pending layers with yellow ────────
-    // Exactly like the label system: action happens at Save time, not draw time.
-    window.addEventListener('GISTAV_COMMIT_SKETCHES', (e) => {
-        const { section } = e.detail || {};
-        const map = findMap();
-        if (!map) return;
-
-        for (let i = activeSketches.length - 1; i >= 0; i--) {
-            const s = activeSketches[i];
-            if (s.section !== 'pending') continue;
-
-            // Remove the blue Leaflet.Draw layer
-            try { s.layer.remove(); } catch(err) {}
-
-            // Draw a new yellow one in its place
-            try {
-                const coords = s.latlngs.map(p => L.latLng(p.lat, p.lng));
-                const yellowLine = L.polyline(coords, SKETCH_STYLE).addTo(map);
-                activeSketches[i] = { section, layer: yellowLine, latlngs: s.latlngs };
-                console.log('✅ Gistav: sketch committed yellow for section', section);
-            } catch(err) {
-                activeSketches.splice(i, 1);
-            }
-        }
-    });
 
     // ─── Ready Interval ───────────────────────────────────────────────────────
     const readyInterval = setInterval(() => {
@@ -179,4 +174,5 @@
     }, 300);
 
 })();
+
 

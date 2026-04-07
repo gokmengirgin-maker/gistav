@@ -176,9 +176,13 @@
         }
         if (res[STORAGE_SKETCHES]) {
             sketches = res[STORAGE_SKETCHES];
-            // Tell engine to redraw sketches once map is ready
+            // Tell engine.js to redraw stored sketches once map is ready
             setTimeout(() => {
-                sketches.forEach(s => window.dispatchEvent(new CustomEvent('GISTAV_REDRAW_SKETCH', { detail: s })));
+                sketches.forEach(s => window.postMessage({ 
+                    type: 'GISTAV_REDRAW_SKETCH', 
+                    section: s.section, 
+                    latlngs: s.latlngs 
+                }, '*'));
             }, 3000);
         }
         updateDataView();
@@ -754,8 +758,8 @@
                         }
                     });
                     chrome.storage.local.set({ [STORAGE_SKETCHES]: sketches });
-                    // Tell engine.js to replace blue Leaflet.Draw layers with yellow
-                    window.dispatchEvent(new CustomEvent('GISTAV_COMMIT_SKETCHES', { detail: { section: project.section } }));
+                    // Tell engine.js via postMessage (crosses content/page world boundary)
+                    window.postMessage({ type: 'GISTAV_COMMIT_SKETCHES', section: project.section }, '*');
                     pendingSketches = [];
                 }
 
@@ -810,7 +814,7 @@
             document.getElementById('p-sec').value = 1;
             clearMarkers();
             sketches = [];
-            window.dispatchEvent(new CustomEvent('GISTAV_CLEAR_SKETCHES'));
+            window.postMessage({ type: 'GISTAV_CLEAR_SKETCHES' }, '*');
             chrome.storage.local.set({ 
                 [STORAGE_RECORDS]: [], 
                 [STORAGE_PROJECT]: project, 
