@@ -30,7 +30,7 @@
 
 ## 📸 Interface Preview
 
-![Gistav Premium UI Mockup](file:///C:/Users/ggirg/.gemini/antigravity/brain/12eb5d63-4f92-41a9-b2a3-fb9267e7d23a/gistav_premium_ui_mockup_1775540157989.png)
+![Gistav Premium UI Mockup](assets/mockup.png)
 
 ---
 
