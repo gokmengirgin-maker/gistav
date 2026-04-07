@@ -21,11 +21,8 @@
     const STORAGE_RECORDS = 'gistav_aufmass_data_v2';
     const STORAGE_PROJECT = 'gistav_aufmass_project_v1';
     const STORAGE_MARKERS = 'gistav_aufmass_markers_v1';
-    const STORAGE_SKETCHES = 'gistav_aufmass_sketches_v1';
 
     let records = [];
-    let sketches = [];
-    let pendingSketches = [];
     let project = {
         nvt: 'NVT 80',
         baustelle: 'Neustraße + Bahnhofstraße',
@@ -165,7 +162,7 @@
         }
     `;
     document.head.appendChild(style);
-    chrome.storage.local.get([STORAGE_RECORDS, STORAGE_PROJECT, STORAGE_SKETCHES], (res) => {
+    chrome.storage.local.get([STORAGE_RECORDS, STORAGE_PROJECT], (res) => {
         if (res[STORAGE_RECORDS]) records = res[STORAGE_RECORDS];
         if (res[STORAGE_PROJECT]) {
             project = { ...project, ...res[STORAGE_PROJECT] };
@@ -174,35 +171,7 @@
             document.getElementById('p-kol').value = project.kolonne;
             document.getElementById('p-sec').value = project.section;
         }
-        if (res[STORAGE_SKETCHES]) {
-            sketches = res[STORAGE_SKETCHES];
-            // Tell engine.js to redraw stored sketches once map is ready
-            setTimeout(() => {
-                sketches.forEach(s => window.postMessage({ 
-                    type: 'GISTAV_REDRAW_SKETCH', 
-                    section: s.section, 
-                    latlngs: s.latlngs 
-                }, '*'));
-            }, 3000);
-        }
         updateDataView();
-    });
-
-    // Receive drawn sketches from engine.js (page world → content world via postMessage)
-    window.addEventListener('message', (e) => {
-        if (e.source !== window || !e.data || e.data.type !== 'GISTAV_SAVE_SKETCH') return;
-        const latlngs = e.data.latlngs;
-        if (!latlngs || !latlngs.length) return;
-
-        // Add to pending (for linking to RA section on Save)
-        pendingSketches.push(latlngs);
-
-        // Also persist IMMEDIATELY to chrome.storage so F5 doesn't erase it
-        const sketchObj = { section: 'pending', latlngs };
-        sketches.push(sketchObj);
-        chrome.storage.local.set({ [STORAGE_SKETCHES]: sketches }, () => {
-            console.log('✅ Gistav: sketch saved to storage immediately.');
-        });
     });
 
     // --- Track Map Clicks for Point Markers ---
@@ -745,24 +714,6 @@
             });
 
             if (subitems.length > 0) {
-                // Commit pending sketches: link to this section + save + turn yellow
-                if (pendingSketches.length > 0) {
-                    // Update pending sketches in storage to use this section number
-                    sketches = sketches.map(s =>
-                        s.section === 'pending' ? { section: project.section, latlngs: s.latlngs } : s
-                    );
-                    // Also add any that arrived via postMessage but weren't in sketches[]
-                    pendingSketches.forEach(latlngs => {
-                        if (!sketches.find(s => s.section === project.section && JSON.stringify(s.latlngs) === JSON.stringify(latlngs))) {
-                            sketches.push({ section: project.section, latlngs });
-                        }
-                    });
-                    chrome.storage.local.set({ [STORAGE_SKETCHES]: sketches });
-                    // Tell engine.js via postMessage (crosses content/page world boundary)
-                    window.postMessage({ type: 'GISTAV_COMMIT_SKETCHES', section: project.section }, '*');
-                    pendingSketches = [];
-                }
-
                 // RA label on map
                 dropRAMarker(project.section);
             }
@@ -771,7 +722,6 @@
             
             // Advance to next whole number for the next measurement
             project.section++;
-            chrome.storage.local.set({ [STORAGE_SKETCHES]: sketches });
             document.getElementById('p-sec').value = project.section;
             
             chrome.storage.local.set({ [STORAGE_RECORDS]: records }, () => {
@@ -813,12 +763,9 @@
             records = []; project.section = 1; project.sub_section = 0;
             document.getElementById('p-sec').value = 1;
             clearMarkers();
-            sketches = [];
-            window.postMessage({ type: 'GISTAV_CLEAR_SKETCHES' }, '*');
             chrome.storage.local.set({ 
                 [STORAGE_RECORDS]: [], 
-                [STORAGE_PROJECT]: project, 
-                [STORAGE_SKETCHES]: [] 
+                [STORAGE_PROJECT]: project 
             }, updateDataView);
         }
     };
