@@ -20,6 +20,7 @@
 
     const STORAGE_RECORDS = 'gistav_aufmass_data_v2';
     const STORAGE_PROJECT = 'gistav_aufmass_project_v1';
+    const STORAGE_MARKERS = 'gistav_aufmass_markers_v1';
 
     let records = [];
     let project = {
@@ -688,6 +689,10 @@
         chrome.storage.local.set({ [STORAGE_PROJECT]: project });
     }
 
+    function syncMarkers() {
+        chrome.storage.local.set({ [STORAGE_MARKERS]: localMarkers });
+    }
+
     // --- Map Label Logic ---
     // --- PURE MATH DRIFT-FREE ENGINE (No Leaflet instance required) ---
     const localMarkers = {}; 
@@ -781,6 +786,7 @@
                                 el.style.opacity = "1.0";
                                 window.removeEventListener('mousemove', onMove);
                                 window.removeEventListener('mouseup', onUp);
+                                syncMarkers(); // Save new positions after drag
                             };
                             window.addEventListener('mousemove', onMove);
                             window.addEventListener('mouseup', onUp);
@@ -839,6 +845,7 @@
                 text: "RA " + raText 
             };
             
+            syncMarkers();
             startRenderLoop();
         }
     }
@@ -847,6 +854,7 @@
         for (const k in localMarkers) delete localMarkers[k];
         const overlay = document.getElementById('gistav-math-overlay');
         if (overlay) overlay.innerHTML = "";
+        syncMarkers();
     }
 
     // --- PDF Mode Logic ---
@@ -942,7 +950,7 @@
     };
 
     // --- Startup ---
-    chrome.storage.local.get([STORAGE_RECORDS, STORAGE_PROJECT], (res) => {
+    chrome.storage.local.get([STORAGE_RECORDS, STORAGE_PROJECT, STORAGE_MARKERS], (res) => {
         records = res[STORAGE_RECORDS] || [];
         if (res[STORAGE_PROJECT]) {
             project = res[STORAGE_PROJECT];
@@ -952,6 +960,15 @@
             document.getElementById('p-date').value = project.date;
             document.getElementById('p-sec').value = project.section;
         }
+
+        if (res[STORAGE_MARKERS]) {
+            const saved = res[STORAGE_MARKERS];
+            for (const k in saved) localMarkers[k] = saved[k];
+            if (Object.keys(localMarkers).length > 0) {
+                startRenderLoop();
+            }
+        }
+        
         updateDataView();
     });
 
