@@ -188,10 +188,17 @@
     window.addEventListener('message', (e) => {
         if (e.source !== window || !e.data || e.data.type !== 'GISTAV_SAVE_SKETCH') return;
         const latlngs = e.data.latlngs;
-        if (!latlngs) return;
-        // Save as 'pending' section; will be linked to RA section on Save
+        if (!latlngs || !latlngs.length) return;
+
+        // Add to pending (for linking to RA section on Save)
         pendingSketches.push(latlngs);
-        console.log('Gistav content.js: sketch received, pending save.');
+
+        // Also persist IMMEDIATELY to chrome.storage so F5 doesn't erase it
+        const sketchObj = { section: 'pending', latlngs };
+        sketches.push(sketchObj);
+        chrome.storage.local.set({ [STORAGE_SKETCHES]: sketches }, () => {
+            console.log('✅ Gistav: sketch saved to storage immediately.');
+        });
     });
 
     // --- Track Map Clicks for Point Markers ---

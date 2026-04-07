@@ -118,54 +118,72 @@
         }
     });
 
+    // ─── Patch Draw Control for yellow color at draw time ────────────────────
+    const SKETCH_STYLE = { color: '#facc15', weight: 6, opacity: 0.95 };
+
+    function patchDrawControlColor(map) {
+        // Scan map object for a Leaflet.Draw control
+        try {
+            for (const key in map) {
+                const obj = map[key];
+                if (obj && obj._toolbars && obj._toolbars.draw) {
+                    const modes = obj._toolbars.draw._modes;
+                    if (modes) Object.values(modes).forEach(mode => {
+                        if (mode.handler && mode.handler.options)
+                            mode.handler.options.shapeOptions = { ...SKETCH_STYLE };
+                    });
+                }
+            }
+        } catch(e) {}
+        // Also scan window
+        try {
+            for (const k in window) {
+                const obj = window[k];
+                if (obj && obj._toolbars && obj._toolbars.draw) {
+                    const modes = obj._toolbars.draw._modes;
+                    if (modes) Object.values(modes).forEach(mode => {
+                        if (mode.handler && mode.handler.options)
+                            mode.handler.options.shapeOptions = { ...SKETCH_STYLE };
+                    });
+                }
+            }
+        } catch(e) {}
+    }
+
     // ─── Draw Hook: intercept Leaflet.Draw events ────────────────────────────
     function initDrawHook(map) {
         if (map._gistav_hooked) return;
         map._gistav_hooked = true;
 
+        patchDrawControlColor(map);
+        map.on('draw:drawstart', () => patchDrawControlColor(map));
+
         map.on('draw:created', (e) => {
             const layer = e.layer;
             if (!layer || typeof layer.getLatLngs !== 'function') return;
 
-            // Apply our yellow style immediately using internal Leaflet method
-            layer.options.color   = '#facc15';
-            layer.options.weight  = 6;
-            layer.options.opacity = 0.95;
-            layer.addTo(map);   // add to map with our options
-            layer.setStyle({ color: '#facc15', weight: 6, opacity: 0.95 });
-            layer.redraw && layer.redraw();
-
             const latlngs = latlngsToPlain(layer.getLatLngs());
 
-            // Tell content.js to save immediately — use postMessage since
-            // engine.js runs in page world and content.js runs in isolated world.
+            // After Gustav site's own draw:created handler runs, restyle with yellow
+            setTimeout(() => {
+                try {
+                    layer.setStyle(SKETCH_STYLE);
+                    if (layer._path) {
+                        layer._path.setAttribute('stroke', '#facc15');
+                        layer._path.setAttribute('stroke-width', '6');
+                        layer._path.setAttribute('stroke-opacity', '0.95');
+                    }
+                } catch(err) {}
+            }, 50);
+
+            // Send to content.js for IMMEDIATE storage via postMessage
             window.postMessage({ type: 'GISTAV_SAVE_SKETCH', latlngs }, '*');
 
-            // Track locally as 'unsaved' (section assigned on Save)
             activeSketches.push({ section: 'pending', layer });
-            console.log('🖊 Gistav: sketch drawn, sent to content.js for storage');
-        });
-
-        // Style also applied during drawing preview
-        map.on('draw:drawstart', () => {
-            // Inject CSS to override Leaflet.Draw's default blue style
-            let s = document.getElementById('gistav-draw-style');
-            if (!s) {
-                s = document.createElement('style');
-                s.id = 'gistav-draw-style';
-                s.innerHTML = `
-                    .leaflet-draw-guide-dash { border-color: #facc15 !important; }
-                    path.leaflet-interactive[stroke="blue"],
-                    path.leaflet-interactive[stroke="#3388ff"] {
-                        stroke: #facc15 !important;
-                        stroke-width: 6px !important;
-                        stroke-opacity: 0.95 !important;
-                    }
-                `;
-                document.head.appendChild(s);
-            }
+            console.log('🖊 Gistav: sketch captured & sent to storage');
         });
     }
+
 
     // ─── Ready Interval ───────────────────────────────────────────────────────
     const readyInterval = setInterval(() => {
