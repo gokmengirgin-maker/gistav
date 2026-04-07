@@ -87,18 +87,17 @@
         const map = findMap();
         if (!map) { pendingSketchesQueue.push(sketch); return; }
         try {
-            // Build proper L.LatLng array from plain objects
-            const coords = sketch.latlngs.map(p => L.latLng(p.lat, p.lng));
-            const line = L.polyline(coords, {
+            // Leaflet accepts an array of {lat, lng} natively, no need to map to L.latLng
+            const line = L.polyline(sketch.latlngs, {
                 color: '#facc15',
                 weight: 6,
                 opacity: 0.95,
                 lineJoin: 'round',
                 lineCap: 'round'
             }).addTo(map);
-            activeSketches.push({ section: sketch.section, layer: line });
+            activeSketches.push({ section: sketch.section, layer: line, latlngs: sketch.latlngs });
             console.log('✅ Gistav: sketch drawn for section', sketch.section);
-        } catch(e) { console.error('Gistav: drawSketch error', e); }
+        } catch(e) { console.error('Gistav: drawSketch error (missing L namespace?)', e); }
     }
 
     // ─── Single postMessage handler (content.js → engine.js cross-world bridge) ─
@@ -128,13 +127,27 @@
             for (let i = activeSketches.length - 1; i >= 0; i--) {
                 const s = activeSketches[i];
                 if (s.section !== 'pending') continue;
-                try { s.layer.remove(); } catch(err) {}
+                
+                // Do NOT remove and recreate. Just style the existing Leaflet.Draw layer.
                 try {
-                    const coords = s.latlngs.map(p => L.latLng(p.lat, p.lng));
-                    const yellowLine = L.polyline(coords, SKETCH_STYLE).addTo(map);
-                    activeSketches[i] = { section, layer: yellowLine, latlngs: s.latlngs };
+                    s.layer.setStyle(SKETCH_STYLE);
+                    // Force the geometry to be strictly on the map
+                    if (!map.hasLayer(s.layer)) {
+                        s.layer.addTo(map);
+                    }
+                    // Force SVG DOM updates
+                    if (s.layer._path) {
+                        s.layer._path.setAttribute('stroke', '#facc15');
+                        s.layer._path.setAttribute('stroke-width', '6');
+                        s.layer._path.setAttribute('stroke-opacity', '0.95');
+                    }
+                    
+                    s.section = section;
+                    activeSketches[i] = s;
                     console.log('✅ Gistav: yellow line committed for section', section);
-                } catch(err) { activeSketches.splice(i, 1); }
+                } catch(err) {
+                    console.error('Gistav: failed to style committed sketch', err);
+                }
             }
         }
     });
