@@ -1,5 +1,5 @@
 /**
- * Gistav Aufmass Pro - v7.5.0 (Drift-Free Ultimate)
+ * Gistav Aufmass Pro - v8.0.0 (Drift-Free Ultimate)
  * Features: Native Map Integration, Zero Lat/Lng Drift, Draggable Labels, PDF Mode.
  */
 
@@ -21,8 +21,14 @@
     const STORAGE_RECORDS = 'gistav_aufmass_data_v2';
     const STORAGE_PROJECT = 'gistav_aufmass_project_v1';
     const STORAGE_MARKERS = 'gistav_aufmass_markers_v1';
+    const STORAGE_LINES = 'gistav_aufmass_lines_v1';
 
     let records = [];
+    let localMarkers = {}; 
+    let localLines = {}; // { id: { points: [{worldX, worldY}], ra: "1.01", color: "#facc15" } }
+    let currentLinePoints = [];
+    let isDrawingMode = false;
+    let mouseWorldPos = null;
     let project = {
         nvt: 'NVT 80',
         baustelle: 'Neustraße + Bahnhofstraße',
@@ -160,9 +166,17 @@
                 print-color-adjust: exact !important;
             }
         }
+
+        /* Drawing Mode Cursor (Always crosshair on map for measurement) */
+        .leaflet-container, 
+        .leaflet-interactive {
+            cursor: crosshair !important;
+        }
     `;
     document.head.appendChild(style);
-    chrome.storage.local.get([STORAGE_RECORDS, STORAGE_PROJECT], (res) => {
+
+    // --- Data Loading ---
+    chrome.storage.local.get([STORAGE_RECORDS, STORAGE_PROJECT, STORAGE_MARKERS, STORAGE_LINES], (res) => {
         if (res[STORAGE_RECORDS]) records = res[STORAGE_RECORDS];
         if (res[STORAGE_PROJECT]) {
             project = { ...project, ...res[STORAGE_PROJECT] };
@@ -171,16 +185,96 @@
             document.getElementById('p-kol').value = project.kolonne;
             document.getElementById('p-sec').value = project.section;
         }
+        if (res[STORAGE_MARKERS]) {
+            Object.assign(localMarkers, res[STORAGE_MARKERS]);
+        }
+        if (res[STORAGE_LINES]) {
+            Object.assign(localLines, res[STORAGE_LINES]);
+        }
         updateDataView();
+        if (Object.keys(localMarkers).length > 0 || Object.keys(localLines).length > 0) {
+            startRenderLoop();
+        }
     });
 
-    // --- Track Map Clicks for Point Markers ---
+    // --- Track Map Clicks for Point Markers & Lines ---
+    let dragStartPos = null;
     document.addEventListener('mousedown', (e) => {
         const container = document.querySelector('.leaflet-container') || document.body;
-        if (container.contains(e.target)) {
-            lastMapClick = { x: e.clientX, y: e.clientY };
+        const panelEl = document.getElementById('gistav-aufmass-panel');
+        if (container.contains(e.target) && (!panelEl || !panelEl.contains(e.target))) {
+            dragStartPos = { x: e.clientX, y: e.clientY };
         }
     }, true);
+
+    document.addEventListener('mouseup', (e) => {
+        if (!dragStartPos) return;
+        const dist = Math.sqrt(Math.pow(e.clientX - dragStartPos.x, 2) + Math.pow(e.clientY - dragStartPos.y, 2));
+        
+        // If moved less than 5 pixels, it's a click
+        if (dist < 5) {
+            const container = document.querySelector('.leaflet-container');
+            if (container && container.contains(e.target) && !e.target.closest('#gistav-aufmass-panel')) {
+                // Only process drawing points if in Drawing Mode AND native tool is open
+                if (isDrawingMode && isNativeToolActive()) {
+                    const anchor = getTileAnchorInfo();
+                    if (anchor) {
+                        const worldPos = screenToWorld(e.clientX, e.clientY, anchor);
+                        currentLinePoints.push(worldPos);
+                        updateLineStatus();
+                    }
+                }
+            }
+            lastMapClick = { x: e.clientX, y: e.clientY };
+        }
+        dragStartPos = null;
+    }, true);
+
+    document.addEventListener('mousemove', (e) => {
+        if (isDrawingMode) {
+            const anchor = getTileAnchorInfo();
+            if (anchor) {
+                mouseWorldPos = screenToWorld(e.clientX, e.clientY, anchor);
+            }
+        } else {
+            mouseWorldPos = null;
+        }
+    }, true);
+
+    window.addEventListener('GISTAV_NATIVE_LINE', (e) => {
+        if (!isDrawingMode) return; // Only sync if user is in drawing mode
+        const { points } = e.detail;
+        const anchor = getTileAnchorInfo();
+        if (anchor) {
+            // Convert native screen points to specialized world coordinates
+            currentLinePoints = points.map(p => screenToWorld(p.x, p.y, anchor));
+            updateLineStatus();
+        }
+    });
+
+    function isNativeToolActive() {
+        // Look for common Leaflet.Draw enabled button indicators
+        const activeBtn = document.querySelector('.leaflet-draw-toolbar-button-enabled, [class*="active"][title*="Line"], [class*="active"][title*="Poly"]');
+        if (activeBtn) return true;
+        
+        // Also check for active drawing cursors/tooltips
+        const tooltip = document.querySelector('.leaflet-draw-tooltip, .leaflet-measure-tooltip');
+        if (tooltip && tooltip.innerText.length > 0) return true;
+
+        return false;
+    }
+
+    function updateLineStatus() {
+        const btnClr = document.getElementById('btn-clr-pts');
+        const btnUndo = document.getElementById('btn-undo-pt');
+        if (btnClr) {
+            btnClr.innerText = `PUNKTE LÖSCHEN (${currentLinePoints.length})`;
+            btnClr.style.display = currentLinePoints.length > 0 ? 'block' : 'none';
+        }
+        if (btnUndo) {
+            btnUndo.style.display = currentLinePoints.length > 0 ? 'block' : 'none';
+        }
+    }
 
     // --- Leistungskatalog ---
     const KATALOG = {
@@ -240,7 +334,7 @@
     panel.id = 'gistav-aufmass-panel';
     panel.innerHTML = `
         <div class="panel-header">
-            <h3>📏 GISTAV AUFMASS PRO v7.0.0</h3>
+            <h3>📏 GISTAV AUFMASS PRO v8.0.0</h3>
             <span id="min-btn">−</span>
         </div>
         <div class="tabs">
@@ -281,16 +375,22 @@
 
             <!-- TAB: AUFMASS -->
             <div id="p-auf" style="display:none">
-                <div style="margin-bottom:12px;">
+                <button id="btn-draw-mode" class="draw-mode-btn">🖋️ ÇİZGİ MODU: PASİF</button>
+
+                <div style="margin-bottom:12px; margin-top:10px;">
                     <label style="color:#22d3ee; font-size:11px;">📍 Adresse / Hausnummer</label>
                     <input type="text" id="manual-addr" placeholder="z.B. Meisenweg 5A" style="font-weight:bold; color:#fff; font-size:14px;">
-                    <small style="color:#64748b; font-size:9px; display:block; margin-top:3px;">Adresse ändern = Neue RA-Section</small>
+                    <small style="color:#64748b; font-size:9px; display:block; margin-top:3px;">Adresse değiştirmek RA grubunu bitirir</small>
                 </div>
 
                 <div class="measure-display">
                     <div class="unit-lbl">Gistav Live Line</div>
                     <div class="live-val" id="dist-val">0.00</div>
                     <div class="unit-lbl">Meter (M)</div>
+                    <div style="display:flex; gap:5px; margin-top:10px;">
+                        <button id="btn-undo-pt" style="display:none; background:#64748b; padding:5px; font-size:10px; height:auto; flex:1;">ZURÜCK (Undo)</button>
+                        <button id="btn-clr-pts" style="display:none; background:#f43f5e; padding:5px; font-size:10px; height:auto; flex:2;">PUNKTE LÖSCHEN (0)</button>
+                    </div>
                 </div>
 
                 <div class="grid-3">
@@ -720,6 +820,22 @@
             if (subitems.length > 0) {
                 // RA label on map
                 dropRAMarker(project.section);
+                
+                // Permanent Line on map
+                if (currentLinePoints.length > 1) {
+                    const lineId = "gistav-l-" + Date.now();
+                    localLines[lineId] = {
+                        points: [...currentLinePoints],
+                        ra: project.section,
+                        color: "#facc15" // Bright Yellow for visibility
+                    };
+                    currentLinePoints = [];
+                    updateLineStatus();
+                    syncLines();
+                } else {
+                    currentLinePoints = []; // Reset even if only 1 point
+                    updateLineStatus();
+                }
             }
 
             setMsg("✅ GESPEICHERT!", "success");
@@ -767,10 +883,42 @@
             records = []; project.section = 1; project.sub_section = 0;
             document.getElementById('p-sec').value = 1;
             clearMarkers();
+            clearLines();
             chrome.storage.local.set({ 
                 [STORAGE_RECORDS]: [], 
-                [STORAGE_PROJECT]: project 
+                [STORAGE_PROJECT]: project,
+                [STORAGE_MARKERS]: {},
+                [STORAGE_LINES]: {}
             }, updateDataView);
+        }
+    };
+
+    document.getElementById('btn-clr-pts').onclick = (e) => {
+        e.stopPropagation();
+        currentLinePoints = [];
+        updateLineStatus();
+    };
+
+    document.getElementById('btn-undo-pt').onclick = (e) => {
+        e.stopPropagation();
+        currentLinePoints.pop();
+        updateLineStatus();
+    };
+
+    document.getElementById('btn-draw-mode').onclick = (e) => {
+        e.stopPropagation();
+        isDrawingMode = !isDrawingMode;
+        const btn = document.getElementById('btn-draw-mode');
+        if (isDrawingMode) {
+            btn.classList.add('active');
+            btn.innerText = "🖋️ ÇİZGİ MODU: AKTİF";
+            document.body.classList.add('gistav-drawing-active');
+            setMsg("Çizim Modu Aktif! Haritaya tıklayarak nokta ekleyin.", "success");
+        } else {
+            btn.classList.remove('active');
+            btn.innerText = "🖋️ ÇİZGİ MODU: PASİF";
+            document.body.classList.remove('gistav-drawing-active');
+            setMsg("Çizim Modu Pasif.");
         }
     };
 
@@ -783,9 +931,13 @@
         chrome.storage.local.set({ [STORAGE_MARKERS]: localMarkers });
     }
 
+    function syncLines() {
+        chrome.storage.local.set({ [STORAGE_LINES]: localLines });
+    }
+
     // --- Map Label Logic ---
     // --- PURE MATH DRIFT-FREE ENGINE (No Leaflet instance required) ---
-    const localMarkers = {}; 
+    // localMarkers and localLines are declared at the top of the file
     let renderLoopActive = false;
 
     // Grab any visible map tile image to use as an absolute geographical reference
@@ -840,6 +992,14 @@
             document.body.appendChild(overlay);
         }
 
+        let svgLayer = document.getElementById('gistav-svg-layer');
+        if (!svgLayer) {
+            svgLayer = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svgLayer.id = "gistav-svg-layer";
+            svgLayer.style.cssText = "position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;";
+            overlay.appendChild(svgLayer);
+        }
+
         let activeAnchor = null;
 
         function loop() {
@@ -889,6 +1049,48 @@
                     // Apply zoom-based scaling while preserving text alignment
                     el.style.transform = `translate(-50%, -100%) scale(${scale})`;
                 }
+
+                // Render Lines
+                let svgContent = "";
+                
+                const nativeActive = isNativeToolActive();
+
+                // Existing Permanent Lines
+                for (const line of Object.values(localLines)) {
+                    const pts = line.points.map(p => {
+                        const s = worldToScreen(p.worldX, p.worldY, anchor);
+                        return `${s.px},${s.py}`;
+                    }).join(" ");
+                    svgContent += `<polyline points="${pts}" fill="none" stroke="${line.color || '#facc15'}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.85" />`;
+                }
+
+                // Current Active Line (Show only if DRAW MODE + NATIVE TOOL are both ON)
+                if (currentLinePoints.length > 0 && isDrawingMode && nativeActive) {
+                    let ptsArr = currentLinePoints.map(p => {
+                        const s = worldToScreen(p.worldX, p.worldY, anchor);
+                        return `${s.px},${s.py}`;
+                    });
+                    
+                    // Add mouse position as a temporary last segment
+                    const anchorUpdate = getTileAnchorInfo();
+                    if (anchorUpdate && mouseWorldPos) {
+                        const s = worldToScreen(mouseWorldPos.worldX, mouseWorldPos.worldY, anchorUpdate);
+                        ptsArr.push(`${s.px},${s.py}`);
+                    }
+                    
+                    if (ptsArr.length > 1) {
+                        const ptsStr = ptsArr.join(" ");
+                        svgContent += `<polyline points="${ptsStr}" fill="none" stroke="#22d3ee" stroke-width="3" stroke-dasharray="8,5" stroke-linecap="round" stroke-linejoin="round" />`;
+                    }
+
+                    // Draw dots on each vertex for clarity
+                    ptsArr.forEach(pt => {
+                        const [x, y] = pt.split(',');
+                        svgContent += `<circle cx="${x}" cy="${y}" r="4" fill="#22d3ee" stroke="white" stroke-width="1" />`;
+                    });
+                }
+
+                svgLayer.innerHTML = svgContent;
             }
             requestAnimationFrame(loop);
         }
@@ -943,8 +1145,18 @@
     function clearMarkers() {
         for (const k in localMarkers) delete localMarkers[k];
         const overlay = document.getElementById('gistav-math-overlay');
-        if (overlay) overlay.innerHTML = "";
+        if (overlay) {
+            const labels = overlay.querySelectorAll('.gistav-map-label');
+            labels.forEach(l => l.remove());
+        }
         syncMarkers();
+    }
+
+    function clearLines() {
+        for (const k in localLines) delete localLines[k];
+        const svg = document.getElementById('gistav-svg-layer');
+        if (svg) svg.innerHTML = "";
+        syncLines();
     }
 
     function deleteMarkerByRA(raText) {
@@ -957,6 +1169,14 @@
             }
         }
         syncMarkers();
+
+        // Also delete associated lines
+        for (const [id, l] of Object.entries(localLines)) {
+            if (String(l.ra) === String(raText)) {
+                delete localLines[id];
+            }
+        }
+        syncLines();
     }
 
     // --- PDF Mode Logic ---
@@ -1066,9 +1286,15 @@
         if (res[STORAGE_MARKERS]) {
             const saved = res[STORAGE_MARKERS];
             for (const k in saved) localMarkers[k] = saved[k];
-            if (Object.keys(localMarkers).length > 0) {
-                startRenderLoop();
-            }
+        }
+
+        if (res[STORAGE_LINES]) {
+            const saved = res[STORAGE_LINES];
+            for (const k in saved) localLines[k] = saved[k];
+        }
+
+        if (Object.keys(localMarkers).length > 0 || Object.keys(localLines).length > 0) {
+            startRenderLoop();
         }
         
         updateDataView();

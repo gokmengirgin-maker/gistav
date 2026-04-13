@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Gistav Aufmass Pro",
-  "version": "7.0.0",
-  "description": "Profesyonel Saha Ölçüm ve Kocaman-Stil Excel Raporlama Aracı (v7.0 Ultimate)",
+  "version": "8.0.0",
+  "description": "Profesyonel Saha Ölçüm ve Kocaman-Stil Excel Raporlama Aracı (v8.0 Ultimate)",
   "permissions": ["activeTab", "scripting", "storage"],
   "icons": {
     "48": "icons/icon48.png",

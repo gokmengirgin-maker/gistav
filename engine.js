@@ -1,5 +1,5 @@
 (function () {
-    console.log('🔧 Gistav engine.js v4 loaded!');
+    console.log('🔧 Gistav engine.js v8.0.0 loaded!');
 
     const gistavMarkers = {};
     const pendingQueue = [];
@@ -88,6 +88,36 @@
             clearInterval(readyInterval);
             while (pendingQueue.length) addMarkerNow(pendingQueue.shift());
             console.log('✅ Gistav engine ready.');
+
+            // --- Native Draw Listener ---
+            try {
+                map.on('draw:created', function (e) {
+                    const type = e.layerType;
+                    const layer = e.layer;
+                    if (type === 'polyline') {
+                        const latlngs = layer.getLatLngs();
+                        // Convert LatLngs to Container Points (screen pixels relative to map)
+                        const pts = latlngs.map(ll => {
+                            const p = map.latLngToContainerPoint(ll);
+                            return { x: p.x, y: p.y };
+                        });
+                        window.dispatchEvent(new CustomEvent('GISTAV_NATIVE_LINE', { 
+                            detail: { points: pts } 
+                        }));
+                    }
+                });
+
+                // Periodic check for existing measure layers if any
+                setInterval(() => {
+                    const measureTips = document.querySelectorAll('.leaflet-tooltip-measure, .leaflet-measure-tooltip');
+                    if (measureTips.length > 0) {
+                        // Handled by content.js scraper too, but engine can see more
+                    }
+                }, 1000);
+            } catch(e) {
+                console.warn('Gistav: Native draw events not supported by this map instance.');
+            }
+
         } else {
             mapWaitTicks++;
             if (mapWaitTicks % 10 === 0) console.log('⏳ Gistav: still waiting for map... (' + (mapWaitTicks*300/1000) + 's)');
